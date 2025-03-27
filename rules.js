@@ -18,24 +18,27 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
 
     const rookCol = toCol > fromCol ? 7 : 0;
     const rookSquare = document.querySelector(`.square[data-row="${kingRow}"][data-col="${rookCol}"]`);
-    if (!rookSquare || !rookSquare.querySelector('.piece') || rookSquare.querySelector('.piece').dataset.type !== 'rook') return false;
+    const rook = rookSquare ? rookSquare.querySelector('.piece') : null;
+    if (!rook || rook.dataset.type !== 'rook') {
+      console.log('Castling invalid: no rook at', rookCol);
+      return false;
+    }
 
     const hasRookMoved = gameState.moveHistory.some(m => m.piece === 'rook' && m.fromCol === rookCol && m.fromRow === kingRow);
     if (hasRookMoved) return false;
 
     const direction = toCol > fromCol ? 1 : -1;
-    for (let col = fromCol + direction; col !== rookCol; col += direction) {
+    for (let col = fromCol; col !== toCol + direction; col += direction) {
       const square = document.querySelector(`.square[data-row="${kingRow}"][data-col="${col}"]`);
-      if (square.querySelector('.piece') || isSquareAttacked(kingRow, col, color === 'white' ? 'black' : 'white')) return false;
+      if (col !== fromCol && (!square || square.querySelector('.piece') || isSquareAttacked(kingRow, col, color === 'white' ? 'black' : 'white'))) {
+        console.log('Castling blocked at', col);
+        return false;
+      }
     }
 
-    // Move rook during castling
-    const rook = rookSquare.querySelector('.piece');
-    const newRookCol = toCol > fromCol ? 5 : 3;
-    const newRookSquare = document.querySelector(`.square[data-row="${kingRow}"][data-col="${newRookCol}"]`);
-    newRookSquare.appendChild(rook);
     return true;
   }
+
       
   function isPathClear(fromRow, fromCol, toRow, toCol) {
     const rowStep = fromRow === toRow ? 0 : (toRow > fromRow ? 1 : -1);
@@ -143,5 +146,3 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
         return false;
     }
 }
-
- // export { isEnPassant, isCastling, isPathClear, isSquareAttacked, isInCheck, isInCheckmate, isValidMove };

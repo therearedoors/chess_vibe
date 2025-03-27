@@ -3,19 +3,105 @@
 <head>
   <title>Chess Vibe</title>
   <style>
-    body {
+body {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
       margin: 0;
       background: #f0f0f0;
+      font-family: Arial, sans-serif;
+    }
+    #menu {
+      text-align: center;
+      position: relative;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+      z-index: 2;
+    }
+    #menu h1 {
+      font-size: 48px;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    #menu button {
+      display: block;
+      margin: 15px auto;
+      padding: 15px 30px;
+      font-size: 20px;
+      background-color: #b58863;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      position: relative;
+      z-index: 3;
+    }
+    #menu button:hover {
+      background-color: #f0d9b5;
+      color: #333;
+    }
+    .menu-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1;
+    }
+    .chequered-bg {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      opacity: 0.5;
+      border: 2px solid #333;
+    }
+    .chequered-square {
+      width: 60px;
+      height: 60px;
+    }
+    .light { background-color: #f0d9b5; }
+    .dark { background-color: #b58863; }
+    .menu-piece {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      z-index: 0;
+    }
+    .white-king {
+      top: 10%;
+      left: 10%;
+    }
+    .black-queen {
+      bottom: 10%;
+      right: 10%;
+    }
+    #game {
+      opacity: 1;
+      position: relative; /* Ensure game stays on top */
+      z-index: 10; /* Above menu and background */
     }
     .chessboard {
       display: grid;
       grid-template-columns: repeat(8, 60px);
       grid-template-rows: repeat(8, 60px);
       border: 2px solid #333;
+      position: relative;
+      z-index: 11; /* Board above game container */
+    }
+    .chessboard.black-view {
+      /* Flip for Black: reverse row and column order */
+      display: flex;
+      flex-direction: column-reverse; /* Rows 7 to 0 */
+    }
+    .chessboard.black-view .row {
+      display: flex;
+      flex-direction: row-reverse; /* Cols 7 to 0 */
     }
     .square {
       width: 60px;
@@ -23,243 +109,60 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      position: relative;
+      z-index: 12;
     }
-    .light { background-color: #f0d9b5; }
-    .dark { background-color: #b58863; }
-    .piece { width: 50px; height: 50px; cursor: move; }
-    .drop-target { background-color: rgba(0, 255, 0, 0.2); }
-  </style>
+    .piece {
+      width: 50px;
+      height: 50px;
+      cursor: move;
+      position: absolute; /* Center in square */
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%); /* Perfect centering */
+      z-index: 13; /* Pieces above squares */
+    }
+    .drop-target {
+      background-color: rgba(0, 255, 0, 0.2);
+    }
+    </style>
 </head>
+<script src="game.js"></script>
 <body>
-    <div id="menu" style="text-align: center;">
+    <div class="menu-container">
+        <div class="chequered-bg"></div>
+        <img src="./chess-assets/white/SVG_icons/king.svg" class="menu-piece white-king" alt="White King">
+        <img src="./chess-assets/black/SVG_icons/queen.svg" class="menu-piece black-queen" alt="Black Queen">
+      </div>
+      <div id="menu">
         <h1>Chess Vibe</h1>
         <button onclick="startGame('white')">Play as White</button>
         <button onclick="startGame('black')">Play as Black</button>
       </div>
-      <div id="game" style="display: none;"></div> <!-- Board goes here -->
-      <script src="rules.js"></script>
+      <div id="game" style="display: none;"></div>
       <script>
-        const gameState = {
-          playerSide: null,
-          currentTurn: 'white',
-          moveHistory: [], // Track moves for en passant and castling
-          gameOver: false
-        };
-        let draggedPiece = null;
-      
-        function startGame(side) {
-          gameState.playerSide = side;
-          document.getElementById('menu').style.display = 'none';
-          const gameDiv = document.getElementById('game');
-          gameDiv.style.display = 'block';
-          renderBoard(gameDiv);
-        }
-      
-        function renderBoard(container) {
-    const board = document.createElement('div');
-    board.className = 'chessboard';
-    container.appendChild(board);
-
+    const bg = document.querySelector('.chequered-bg');
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const square = document.createElement('div');
-        square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
-        square.dataset.row = row;
-        square.dataset.col = col;
-
-        const piece = getPiece(row, col);
-        if (piece) {
-          const img = document.createElement('img');
-          img.src = piece;
-          img.className = 'piece';
-          img.draggable = true;
-          img.dataset.type = getPieceType(piece);
-          img.dataset.color = getPieceColor(piece);
-          img.ondragstart = (e) => {
-            if (!gameState.gameOver && gameState.playerSide === gameState.currentTurn && 
-                img.dataset.color === gameState.playerSide) {
-              draggedPiece = img;
-              e.dataTransfer.setData('text/plain', `${row},${col}`);
-            }
-          };
-          square.appendChild(img);
-        }
-
-        square.ondragover = (e) => e.preventDefault();
-        square.ondragenter = () => {
-          if (isValidMove(draggedPiece, square)) {
-            square.classList.add('drop-target');
-          }
-        };
-        square.ondragleave = () => square.classList.remove('drop-target');
-        square.ondrop = (e) => {
-          e.preventDefault();
-          square.classList.remove('drop-target');
-          if (draggedPiece && isValidMove(draggedPiece, square)) {
-            const fromRow = parseInt(draggedPiece.parentElement.dataset.row);
-            const fromCol = parseInt(draggedPiece.parentElement.dataset.col);
-            const toRow = parseInt(square.dataset.row);
-            const toCol = parseInt(square.dataset.col);
-            let capturedPiece = null;
-            if (square.querySelector('.piece')) {
-              capturedPiece = square.querySelector('.piece');
-              square.removeChild(capturedPiece);
-            } else if (draggedPiece.dataset.type === 'pawn' && Math.abs(fromCol - toCol) === 1) {
-              // En passant capture
-              const enPassantRow = gameState.currentTurn === 'white' ? toRow + 1 : toRow - 1;
-              const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${toCol}"]`);
-              if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
-                capturedPiece = enPassantSquare.querySelector('.piece');
-                enPassantSquare.removeChild(capturedPiece);
-              }
-            }
-            square.appendChild(draggedPiece);
-            gameState.moveHistory.push({ fromRow, fromCol, toRow, toCol, piece: draggedPiece.dataset.type });
-            gameState.currentTurn = gameState.currentTurn === 'white' ? 'black' : 'white';
-            draggedPiece = null;
-            if (isInCheckmate(gameState.currentTurn)) {
-              alert(`${gameState.currentTurn} is in checkmate! Game over.`);
-              gameState.gameOver = true;
-            } else if (isInCheck(gameState.currentTurn)) {
-              console.log(`${gameState.currentTurn} is in check!`);
-            }
-            if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
-              setTimeout(makeAIMove, 500);
-            }
-          }
-        };
-
-        board.appendChild(square);
+        square.className = `chequered-square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+        bg.appendChild(square);
       }
     }
-  }
-      
-  function makeAIMove() {
-    const aiColor = gameState.playerSide === 'white' ? 'black' : 'white';
-    const pieces = Array.from(document.querySelectorAll(`.piece[data-color="${aiColor}"]`));
-    let validMoves = [];
-
-    // If AI is in check, filter moves that break it
-    const inCheck = isInCheck(aiColor);
-    if (inCheck && isInCheckmate(aiColor)) {
-      alert(`${aiColor} is in checkmate! ${gameState.playerSide} wins!`);
-      gameState.gameOver = true;
-      return;
-    }
-
-    for (const piece of pieces) {
-      const fromRow = parseInt(piece.parentElement.dataset.row);
-      const fromCol = parseInt(piece.parentElement.dataset.col);
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          const target = document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
-          if (isValidMove(piece, target)) {
-            // Simulate the move
-            const originalSquare = piece.parentElement;
-            const targetPiece = target.querySelector('.piece');
-            let rookMoved = false;
-            let rookSquare = null, rook = null, newRookSquare = null;
-
-            if (piece.dataset.type === 'king' && Math.abs(col - fromCol) === 2) {
-              const rookCol = col > fromCol ? 7 : 0;
-              rookSquare = document.querySelector(`.square[data-row="${fromRow}"][data-col="${rookCol}"]`);
-              rook = rookSquare.querySelector('.piece');
-              const newRookCol = col > fromCol ? 5 : 3;
-              newRookSquare = document.querySelector(`.square[data-row="${fromRow}"][data-col="${newRookCol}"]`);
-              newRookSquare.appendChild(rook);
-              rookMoved = true;
-            }
-
-            if (targetPiece) target.removeChild(targetPiece);
-            else if (piece.dataset.type === 'pawn' && Math.abs(fromCol - col) === 1) {
-              const enPassantRow = aiColor === 'white' ? row + 1 : row - 1;
-              const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${col}"]`);
-              if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
-                enPassantSquare.removeChild(enPassantSquare.querySelector('.piece'));
-              }
-            }
-            target.appendChild(piece);
-
-            // Check if this move leaves/breaks check
-            const stillInCheck = isInCheck(aiColor);
-            const isLegalMove = inCheck ? !stillInCheck : !stillInCheck;
-
-            // Undo the move
-            originalSquare.appendChild(piece);
-            if (targetPiece) target.appendChild(targetPiece);
-            if (rookMoved) rookSquare.appendChild(rook);
-
-            if (isLegalMove) {
-              validMoves.push({ piece, fromRow, fromCol, toRow: row, toCol: col, target });
-            }
-          }
-        }
-      }
-    }
-
-    if (validMoves.length > 0) {
-      const move = validMoves[Math.floor(Math.random() * validMoves.length)];
-      if (move.piece.dataset.type === 'king' && Math.abs(move.toCol - move.fromCol) === 2) {
-        const rookCol = move.toCol > move.fromCol ? 7 : 0;
-        const rookSquare = document.querySelector(`.square[data-row="${move.fromRow}"][data-col="${rookCol}"]`);
-        const rook = rookSquare.querySelector('.piece');
-        const newRookCol = move.toCol > move.fromCol ? 5 : 3;
-        const newRookSquare = document.querySelector(`.square[data-row="${move.fromRow}"][data-col="${newRookCol}"]`);
-        newRookSquare.appendChild(rook);
-        move.target.appendChild(move.piece);
-      } else {
-        if (move.target.querySelector('.piece')) {
-          move.target.removeChild(move.target.querySelector('.piece'));
-        } else if (move.piece.dataset.type === 'pawn' && Math.abs(move.fromCol - move.toCol) === 1) {
-          const enPassantRow = aiColor === 'white' ? move.toRow + 1 : move.toRow - 1;
-          const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${move.toCol}"]`);
-          if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
-            enPassantSquare.removeChild(enPassantSquare.querySelector('.piece'));
-          }
-        }
-        move.target.appendChild(move.piece);
-      }
-      gameState.moveHistory.push({ fromRow: move.fromRow, fromCol: move.fromCol, toRow: move.toRow, toCol: move.toCol, piece: move.piece.dataset.type });
-      gameState.currentTurn = gameState.playerSide;
-
-      const checkedColor = gameState.currentTurn;
-      if (isInCheckmate(checkedColor)) {
-        alert(`${checkedColor} is in checkmate! ${aiColor} wins!`);
-        gameState.gameOver = true;
-      } else if (isInCheck(checkedColor)) {
-        alert(`${checkedColor} is in check!`);
-      }
-    } else if (inCheck) {
-      alert(`${aiColor} is in checkmate! ${gameState.playerSide} wins!`);
-      gameState.gameOver = true;
-    }
-  }
-      
-        function getPiece(row, col) {
-          const pieces = {
-            0: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'],
-            1: 'pawn',
-            6: 'pawn',
-            7: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook']
-          };
-          if (row in pieces) {
-            const color = row < 2 ? 'black' : 'white';
-            const piece = row === 1 || row === 6 ? pieces[row] : pieces[row][col];
-            return `./chess-assets/${color}/SVG_icons/${piece}.svg`;
-          }
-          return null;
-        }
-      
-        function getPieceType(src) {
-          return src.split('/').pop().replace('.svg', '');
-        }
-      
-        function getPieceColor(src) {
-          return src.includes('black') ? 'black' : 'white';
-        }
-
-  
-
+    const gameState = {
+    playerSide: null,
+    currentTurn: 'white',
+    moveHistory: [],
+    gameOver: false,
+    castlingRights: { // Reset to true
+        white_kingside: true,
+        white_queenside: true,
+        black_kingside: true,
+        black_queenside: true
+      },
+    enPassantTarget: null // New: track en passant target
+  };
+  let draggedPiece = null;
       </script>
 </body>
 </html>
