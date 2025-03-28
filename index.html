@@ -123,10 +123,66 @@ body {
     .drop-target {
       background-color: rgba(0, 255, 0, 0.2);
     }
+    .promotion-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 100;
+      display: none; /* Hidden by default */
+      text-align: center;
+    }
+    .promotion-modal.show {
+      display: block;
+    }
+    .promotion-modal h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      color: #333;
+    }
+    .promotion-modal .option {
+      display: inline-block;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .promotion-modal .option img {
+      width: 40px;
+      height: 40px;
+    }
+    .status-message {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-size: 16px;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+    .status-message.show {
+      opacity: 1;
+    }
+    .status-message.checkmate {
+      background: rgba(255, 0, 0, 0.7); /* Red for checkmate */
+    }
     </style>
 </head>
 <script src="game.js"></script>
 <body>
+    <div class="promotion-modal" id="promotionModal">
+        <h3>Promote your pawn:</h3>
+        <div class="option" data-piece="queen"><img src="./chess-assets/white/SVG_icons/queen.svg" alt="Queen"></div>
+        <div class="option" data-piece="rook"><img src="./chess-assets/white/SVG_icons/rook.svg" alt="Rook"></div>
+        <div class="option" data-piece="bishop"><img src="./chess-assets/white/SVG_icons/bishop.svg" alt="Bishop"></div>
+        <div class="option" data-piece="knight"><img src="./chess-assets/white/SVG_icons/knight.svg" alt="Knight"></div>
+      </div>
     <div class="menu-container">
         <div class="chequered-bg"></div>
         <img src="./chess-assets/white/SVG_icons/king.svg" class="menu-piece white-king" alt="White King">
@@ -137,7 +193,9 @@ body {
         <button onclick="startGame('white')">Play as White</button>
         <button onclick="startGame('black')">Play as Black</button>
       </div>
-      <div id="game" style="display: none;"></div>
+      <div id="game" style="display: none; position: relative;">
+        <div class="status-message" id="statusMessage"></div>
+      </div>
       <script>
     const bg = document.querySelector('.chequered-bg');
     for (let row = 0; row < 8; row++) {

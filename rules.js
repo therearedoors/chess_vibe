@@ -112,35 +112,68 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
 
     if (targetColor === color) return false;
 
+    console.log(`Validating move: ${type} from (${fromRow},${fromCol}) to (${toRow},${toCol}), color: ${color}, player: ${gameState.playerSide}`);
+
+    // Basic move validation
+    let isMoveValid = false;
     switch (type) {
-        case 'pawn':
-            const direction = gameState.playerSide === 'white' ? -1 : 1; // White up, Black down
-            const startRow = gameState.playerSide === 'white' ? 6 : 1;  // White starts at 6, Black at 1
-            if (color === gameState.playerSide) { // Player's turn
-              if (toCol === fromCol && toRow === fromRow + direction && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-              if (toCol === fromCol && toRow === fromRow + 2 * direction && fromRow === startRow && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-              if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + direction && (targetPiece || isEnPassant(fromRow, fromCol, toRow, toCol))) return true;
-            }
-            return false;
+      case 'pawn':
+        const direction = color === 'white' ? -1 : 1;
+        const startRow = color === 'white' ? 6 : 1;
+        if (color === gameState.playerSide) {
+          console.log(`Pawn direction: ${direction}, startRow: ${startRow}, from: ${fromRow}, to: ${toRow}`);
+          if (toCol === fromCol && toRow === fromRow + direction && !targetPiece) isMoveValid = isPathClear(fromRow, fromCol, toRow, toCol);
+          if (toCol === fromCol && toRow === fromRow + 2 * direction && fromRow === startRow && !targetPiece) isMoveValid = isPathClear(fromRow, fromCol, toRow, toCol);
+          if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + direction && (targetPiece || isEnPassant(fromRow, fromCol, toRow, toCol))) isMoveValid = true;
+        }
+        break;
       case 'rook':
         if (fromRow !== toRow && fromCol !== toCol) return false;
-        return isPathClear(fromRow, fromCol, toRow, toCol);
+        isMoveValid = isPathClear(fromRow, fromCol, toRow, toCol);
+        break;
       case 'bishop':
         if (Math.abs(fromRow - toRow) !== Math.abs(fromCol - toCol)) return false;
-        return isPathClear(fromRow, fromCol, toRow, toCol);
+        isMoveValid = isPathClear(fromRow, fromCol, toRow, toCol);
+        break;
       case 'queen':
         if ((fromRow === toRow || fromCol === toCol) || 
             (Math.abs(fromRow - toRow) === Math.abs(fromCol - toCol))) {
-          return isPathClear(fromRow, fromCol, toRow, toCol);
+          isMoveValid = isPathClear(fromRow, fromCol, toRow, toCol);
         }
-        return false;
+        break;
       case 'king':
-        if (Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1) return true;
-        return isCastling(piece, fromRow, fromCol, toRow, toCol);
+        if (Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1) isMoveValid = true;
+        if (isCastling(piece, fromRow, fromCol, toRow, toCol)) isMoveValid = true;
+        break;
       case 'knight':
-        return (Math.abs(fromRow - toRow) === 2 && Math.abs(fromCol - toCol) === 1) ||
-               (Math.abs(fromRow - toRow) === 1 && Math.abs(fromCol - toCol) === 2);
+        isMoveValid = (Math.abs(fromRow - toRow) === 2 && Math.abs(fromCol - toCol) === 1) ||
+                      (Math.abs(fromRow - toRow) === 1 && Math.abs(fromCol - toCol) === 2);
+        break;
       default:
         return false;
     }
+
+    if (!isMoveValid) return false;
+
+    // Simulate the move to check if it leaves the king in check
+    const originalSquare = piece.parentElement;
+    const targetPieceToRemove = targetSquare.querySelector('.piece');
+    if (targetPieceToRemove) targetSquare.removeChild(targetPieceToRemove);
+    targetSquare.appendChild(piece);
+
+    const kingInCheck = isInCheck(color);
+    console.log(`After move, ${color} king in check: ${kingInCheck}`);
+
+    // Undo the move
+    originalSquare.appendChild(piece);
+    if (targetPieceToRemove) targetSquare.appendChild(targetPieceToRemove);
+
+    // If the move leaves the king in check, it's illegal
+    if (kingInCheck) {
+      console.log(`Move blocked: leaves ${color} king in check`);
+      return false;
+    }
+
+    return true;
+  }
 }

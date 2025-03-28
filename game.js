@@ -1,4 +1,120 @@
 const { spawn } = require('child_process'); // Add this at the top (Electron/Node)
+const path = require('path');
+
+// Path to the Stockfish binary (adjust based on your OS and file location)
+const stockfishPath = path.join(__dirname, 'bin', 'stockfish');
+
+// Spawn the Stockfish process
+const stockfish = spawn(stockfishPath);
+
+// Handle Stockfish output
+stockfish.stdout.on('data', (data) => {
+  console.log(`Stockfish says: ${data}`);
+});
+
+// Handle errors
+stockfish.stderr.on('data', (data) => {
+  console.error(`Stockfish error: ${data}`);
+});
+
+// Handle process exit
+stockfish.on('close', (code) => {
+  console.log(`Stockfish process exited with code ${code}`);
+});
+
+// Initialize Stockfish
+stockfish.stdin.write('uci\n');
+stockfish.stdin.write('isready\n');
+
+// Function to set a position and get the best move
+function getBestMove(fen, callback) {
+  // Set the position using a FEN string
+  stockfish.stdin.write(`position fen ${fen}\n`);
+  // Tell Stockfish to calculate a move (e.g., search to depth 15)
+  stockfish.stdin.write('go depth 15\n');
+
+  // Listen for the best move response
+  stockfish.stdout.on('data', (data) => {
+    const output = data.toString();
+    if (output.includes('bestmove')) {
+      const move = output.match(/bestmove (\S+)/)[1];
+      callback(move); // Pass the best move to your GUI
+    }
+  });
+}
+
+function jsonToFen(json) {
+    // 1. Piece Placement
+    const pieceMap = {
+      'pawn': { 'white': 'P', 'black': 'p' },
+      'knight': { 'white': 'N', 'black': 'n' },
+      'bishop': { 'white': 'B', 'black': 'b' },
+      'rook': { 'white': 'R', 'black': 'r' },
+      'queen': { 'white': 'Q', 'black': 'q' },
+      'king': { 'white': 'K', 'black': 'k' }
+    };
+  
+    let boardFen = '';
+    for (let row = 0; row < 8; row++) {
+      let emptyCount = 0;
+      for (let col = 0; col < 8; col++) {
+        const square = json.board[row][col];
+        if (square === null) {
+          emptyCount++;
+        } else {
+          if (emptyCount > 0) {
+            boardFen += emptyCount;
+            emptyCount = 0;
+          }
+          const { piece_type, color } = square;
+          boardFen += pieceMap[piece_type][color];
+        }
+      }
+      if (emptyCount > 0) {
+        boardFen += emptyCount;
+      }
+      if (row < 7) {
+        boardFen += '/';
+      }
+    }
+  
+    // 2. Active Color
+    const activeColor = json.current_turn === 'white' ? 'w' : 'b';
+  
+    // 3. Castling Availability
+    let castling = '';
+    const rights = json.castling_rights;
+    if (rights.white_kingside) castling += 'K';
+    if (rights.white_queenside) castling += 'Q';
+    if (rights.black_kingside) castling += 'k';
+    if (rights.black_queenside) castling += 'q';
+    if (castling === '') castling = '-';
+  
+    // 4. En Passant Target Square
+    let enPassant = '-';
+    if (json.en_passant_target && json.en_passant_target.length === 2) {
+      const [epRow, epCol] = json.en_passant_target;
+      // Convert row (0-7) to rank (8-1) and col (0-7) to file (a-h)
+      const file = String.fromCharCode(97 + epCol); // 'a' + col
+      const rank = 8 - epRow; // Invert row to rank
+      enPassant = `${file}${rank}`;
+    }
+  
+    // 5. Halfmove Clock (not explicitly provided, infer from move_history or assume 0)
+    const halfmoveClock = json.move_history.length > 0 ? 1 : 0; // Simplified assumption
+  
+    // 6. Fullmove Number (not provided, infer from move_history or assume 1)
+    const fullmoveNumber = Math.floor(json.move_history.length / 2) + 1;
+  
+    // Combine all parts into FEN string
+    return `${boardFen} ${activeColor} ${castling} ${enPassant} ${halfmoveClock} ${fullmoveNumber}`;
+  }
+
+// Example usage
+const startingPosition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+getBestMove(startingPosition, (move) => {
+  console.log(`Best move: ${move}`);
+});
 
 function startGame(side) {
     gameState.playerSide = side;
@@ -40,13 +156,170 @@ function resetGame() {
     }, 1000);
   }
     
-  function renderBoard(container) {
+//   function renderBoard(container) {
+//     const board = document.createElement('div');
+//     board.className = 'chessboard';
+//     if (gameState.playerSide === 'black') {
+//       board.classList.add('black-view'); // Flip for Black
+//     } else {
+//         console.log('White view: standard board (row 0 at top, 7 at bottom)');
+//     }
+//     container.appendChild(board);
+
+//     for (let row = 0; row < 8; row++) {
+//       for (let col = 0; col < 8; col++) {
+//         const colorRow = gameState.playerSide === 'black' ? (7 - row) : row;
+//         const colorCol = gameState.playerSide === 'black' ? (7 - col) : col;
+//         const square = document.createElement('div');
+//         square.className = `square ${(colorRow + colorCol) % 2 === 0 ? 'light' : 'dark'}`;
+//         square.dataset.row = row; // Logical 0-7
+//         square.dataset.col = col;
+
+//         const piece = getPiece(row, col);
+//         if (piece) {
+//           const img = document.createElement('img');
+//           img.src = piece;
+//           img.className = 'piece';
+//           img.draggable = true;
+//           img.dataset.type = getPieceType(piece);
+//           img.dataset.color = getPieceColor(piece);
+//           img.addEventListener('dragstart', (e) => {
+//             if (!gameState.gameOver && gameState.playerSide === gameState.currentTurn && 
+//                 img.dataset.color === gameState.playerSide) {
+//               console.log(`Drag start: ${img.dataset.type} at (${row},${col}), color: ${img.dataset.color}, turn: ${gameState.currentTurn}`);
+//               draggedPiece = img;
+//               const fromRow = parseInt(img.parentElement.dataset.row);
+//               const fromCol = parseInt(img.parentElement.dataset.col);
+//               e.dataTransfer.setData('text/plain', `${fromRow},${fromCol}`);
+//             } else {
+//               console.log(`Drag blocked: color ${img.dataset.color}, player ${gameState.playerSide}, turn ${gameState.currentTurn}`);
+//             }
+//           });
+//           square.appendChild(img);
+//         }
+
+//         square.ondragover = (e) => e.preventDefault();
+//         square.ondragenter = () => {
+//           if (isValidMove(draggedPiece, square)) {
+//             square.classList.add('drop-target');
+//           }
+//         };
+//         square.ondragleave = () => square.classList.remove('drop-target');
+//         square.ondrop = (e) => {
+//           e.preventDefault();
+//           square.classList.remove('drop-target');
+//           if (draggedPiece && isValidMove(draggedPiece, square)) {
+//             console.log(`Drop to: (${row},${col})`);
+//             const fromRow = parseInt(draggedPiece.parentElement.dataset.row);
+//             const fromCol = parseInt(draggedPiece.parentElement.dataset.col);
+//             const toRow = parseInt(square.dataset.row);
+//             const toCol = parseInt(square.dataset.col);
+//             let captured = null;
+//             let promotion = null;
+
+//             if (draggedPiece.dataset.type === 'king' && Math.abs(toCol - fromCol) === 2) {
+//               const rookCol = toCol > fromCol ? 7 : 0;
+//               const rookSquare = document.querySelector(`.square[data-row="${fromRow}"][data-col="${rookCol}"]`);
+//               const rook = rookSquare.querySelector('.piece');
+//               const newRookCol = toCol > fromCol ? 5 : 3;
+//               const newRookSquare = document.querySelector(`.square[data-row="${fromRow}"][data-col="${newRookCol}"]`);
+//               newRookSquare.appendChild(rook);
+//               square.appendChild(draggedPiece);
+//               if (gameState.currentTurn === 'white') {
+//                 gameState.castlingRights.white_kingside = false;
+//                 gameState.castlingRights.white_queenside = false;
+//               } else {
+//                 gameState.castlingRights.black_kingside = false;
+//                 gameState.castlingRights.black_queenside = false;
+//               }
+//             } else {
+//               if (square.querySelector('.piece')) {
+//                 captured = square.querySelector('.piece').dataset.type;
+//                 square.removeChild(square.querySelector('.piece'));
+//               } else if (draggedPiece.dataset.type === 'pawn' && Math.abs(fromCol - toCol) === 1) {
+//                 const enPassantRow = gameState.currentTurn === 'white' ? toRow + 1 : toRow - 1;
+//                 const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${toCol}"]`);
+//                 if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
+//                   captured = enPassantSquare.querySelector('.piece').dataset.type;
+//                   enPassantSquare.removeChild(enPassantSquare.querySelector('.piece'));
+//                 }
+//               }
+//               square.appendChild(draggedPiece);
+
+//               // Pawn promotion (simple: always queen for now)
+//               if (draggedPiece.dataset.type === 'pawn' && (toRow === 0 || toRow === 7)) {
+//                 promotion = 'queen';
+//                 draggedPiece.src = `./chess-assets/${gameState.currentTurn}/SVG_icons/queen.svg`;
+//                 draggedPiece.dataset.type = 'queen';
+//               }
+
+//               // Update castling rights
+//               if (draggedPiece.dataset.type === 'king') {
+//                 if (gameState.currentTurn === 'white') {
+//                   gameState.castlingRights.white_kingside = false;
+//                   gameState.castlingRights.white_queenside = false;
+//                 } else {
+//                   gameState.castlingRights.black_kingside = false;
+//                   gameState.castlingRights.black_queenside = false;
+//                 }
+//               } else if (draggedPiece.dataset.type === 'rook') {
+//                 if (gameState.currentTurn === 'white') {
+//                   if (fromCol === 0) gameState.castlingRights.white_queenside = false;
+//                   if (fromCol === 7) gameState.castlingRights.white_kingside = false;
+//                 } else {
+//                   if (fromCol === 0) gameState.castlingRights.black_queenside = false;
+//                   if (fromCol === 7) gameState.castlingRights.black_kingside = false;
+//                 }
+//               }
+
+//               // En passant target
+//               if (draggedPiece.dataset.type === 'pawn' && Math.abs(fromRow - toRow) === 2) {
+//                 gameState.enPassantTarget = [toRow + (gameState.currentTurn === 'white' ? 1 : -1), toCol];
+//               } else {
+//                 gameState.enPassantTarget = null;
+//               }
+//             }
+
+//             gameState.moveHistory.push({
+//               fromRow: fromRow,
+//               fromCol: fromCol,
+//               toRow: toRow,
+//               toCol: toCol,
+//               piece: draggedPiece.dataset.type,
+//               captured,
+//               promotion
+//             });
+//             gameState.currentTurn = gameState.currentTurn === 'white' ? 'black' : 'white';
+//             draggedPiece = null;
+
+//             const checkedColor = gameState.currentTurn;
+//             if (isInCheckmate(checkedColor)) {
+//               alert(`${checkedColor} is in checkmate! ${gameState.playerSide} wins!`);
+//               gameState.gameOver = true;
+//               resetGame();
+//             } else if (isInCheck(checkedColor)) {
+//               alert(`${checkedColor} is in check!`);
+//               if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
+//                 setTimeout(makeAIMove, 500);
+//               }
+//             } else if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
+//               setTimeout(makeAIMove, 500);
+//             }
+//           }
+//         };
+//         board.appendChild(square);
+//       }
+//     }
+//   }
+
+function renderBoard(container) {
     const board = document.createElement('div');
     board.className = 'chessboard';
     if (gameState.playerSide === 'black') {
-      board.classList.add('black-view'); // Flip for Black
+      board.classList.add('black-view');
+      console.log('Black view: flipped board (row 7 at top, 0 at bottom)');
     } else {
-        console.log('White view: standard board (row 0 at top, 7 at bottom)');
+      console.log('White view: standard board (row 0 at top, 7 at bottom)');
     }
     container.appendChild(board);
 
@@ -55,9 +328,11 @@ function resetGame() {
         const colorRow = gameState.playerSide === 'black' ? (7 - row) : row;
         const colorCol = gameState.playerSide === 'black' ? (7 - col) : col;
         const square = document.createElement('div');
-        square.className = `square ${(colorRow + colorCol) % 2 === 0 ? 'light' : 'dark'}`;
-        square.dataset.row = row; // Logical 0-7
+        square.className = `square ${(colorRow + colorCol) % 2 === 0 ? 'dark' : 'light'}`;
+        square.dataset.row = row;
         square.dataset.col = col;
+
+        console.log(`Square (${row},${col}) color: ${(colorRow + colorCol) % 2 === 0 ? 'dark' : 'light'}`);
 
         const piece = getPiece(row, col);
         if (piece) {
@@ -70,7 +345,7 @@ function resetGame() {
           img.addEventListener('dragstart', (e) => {
             if (!gameState.gameOver && gameState.playerSide === gameState.currentTurn && 
                 img.dataset.color === gameState.playerSide) {
-              console.log(`Drag start: ${img.dataset.type} at (${row},${col}), color: ${img.dataset.color}, turn: ${gameState.currentTurn}`);
+              console.log(`Drag start: ${img.dataset.type} at (${row},${col}), color: ${img.dataset.color}, turn: ${gameState.currentTurn}, position: top ${img.style.top}, left ${img.style.left}`);
               draggedPiece = img;
               const fromRow = parseInt(img.parentElement.dataset.row);
               const fromCol = parseInt(img.parentElement.dataset.col);
@@ -130,14 +405,91 @@ function resetGame() {
               }
               square.appendChild(draggedPiece);
 
-              // Pawn promotion (simple: always queen for now)
               if (draggedPiece.dataset.type === 'pawn' && (toRow === 0 || toRow === 7)) {
-                promotion = 'queen';
-                draggedPiece.src = `./chess-assets/${gameState.currentTurn}/SVG_icons/queen.svg`;
-                draggedPiece.dataset.type = 'queen';
+                const modal = document.getElementById('promotionModal');
+                const options = modal.querySelectorAll('.option');
+                const color = gameState.currentTurn;
+
+                options.forEach(option => {
+                  const pieceType = option.dataset.piece;
+                  const img = option.querySelector('img');
+                  img.src = `./chess-assets/${color}/SVG_icons/${pieceType}.svg`;
+                });
+
+                modal.classList.add('show');
+                return new Promise((resolve) => {
+                  options.forEach(option => {
+                    option.addEventListener('click', function onClick() {
+                      promotion = option.dataset.piece;
+                      draggedPiece.src = `./chess-assets/${color}/SVG_icons/${promotion}.svg`;
+                      draggedPiece.dataset.type = promotion;
+                      modal.classList.remove('show');
+                      options.forEach(opt => opt.removeEventListener('click', onClick));
+                      resolve();
+                    }, { once: true });
+                  });
+                }).then(() => {
+                  if (draggedPiece.dataset.type === 'king') {
+                    if (gameState.currentTurn === 'white') {
+                      gameState.castlingRights.white_kingside = false;
+                      gameState.castlingRights.white_queenside = false;
+                    } else {
+                      gameState.castlingRights.black_kingside = false;
+                      gameState.castlingRights.black_queenside = false;
+                    }
+                  } else if (draggedPiece.dataset.type === 'rook') {
+                    if (gameState.currentTurn === 'white') {
+                      if (fromCol === 0) gameState.castlingRights.white_queenside = false;
+                      if (fromCol === 7) gameState.castlingRights.white_kingside = false;
+                    } else {
+                      if (fromCol === 0) gameState.castlingRights.black_queenside = false;
+                      if (fromCol === 7) gameState.castlingRights.black_kingside = false;
+                    }
+                  }
+
+                  if (draggedPiece.dataset.type === 'pawn' && Math.abs(fromRow - toRow) === 2) {
+                    gameState.enPassantTarget = [toRow + (gameState.currentTurn === 'white' ? 1 : -1), toCol];
+                  } else {
+                    gameState.enPassantTarget = null;
+                  }
+
+                  gameState.moveHistory.push({
+                    fromRow: fromRow,
+                    fromCol: fromCol,
+                    toRow: toRow,
+                    toCol: toCol,
+                    piece: draggedPiece.dataset.type,
+                    captured,
+                    promotion
+                  });
+                  gameState.currentTurn = gameState.currentTurn === 'white' ? 'black' : 'white';
+                  draggedPiece = null;
+
+                  const checkedColor = gameState.currentTurn;
+                  const statusMessage = document.getElementById('statusMessage');
+                  if (isInCheckmate(checkedColor)) {
+                    statusMessage.textContent = `${checkedColor} is in checkmate! ${gameState.playerSide} wins!`;
+                    statusMessage.classList.add('show', 'checkmate');
+                    gameState.gameOver = true;
+                    resetGame();
+                  } else if (isInCheck(checkedColor)) {
+                    statusMessage.textContent = `${checkedColor} is in check!`;
+                    statusMessage.classList.add('show');
+                    setTimeout(() => {
+                      statusMessage.classList.remove('show');
+                    }, 300); // Fade out after 2 seconds
+                    if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
+                      setTimeout(makeAIMove, 500);
+                    }
+                  } else {
+                    statusMessage.classList.remove('show'); // Clear message if no check
+                    if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
+                      setTimeout(makeAIMove, 500);
+                    }
+                  }
+                });
               }
 
-              // Update castling rights
               if (draggedPiece.dataset.type === 'king') {
                 if (gameState.currentTurn === 'white') {
                   gameState.castlingRights.white_kingside = false;
@@ -156,7 +508,6 @@ function resetGame() {
                 }
               }
 
-              // En passant target
               if (draggedPiece.dataset.type === 'pawn' && Math.abs(fromRow - toRow) === 2) {
                 gameState.enPassantTarget = [toRow + (gameState.currentTurn === 'white' ? 1 : -1), toCol];
               } else {
@@ -177,31 +528,192 @@ function resetGame() {
             draggedPiece = null;
 
             const checkedColor = gameState.currentTurn;
+            const statusMessage = document.getElementById('statusMessage');
             if (isInCheckmate(checkedColor)) {
-              alert(`${checkedColor} is in checkmate! ${gameState.playerSide} wins!`);
+              statusMessage.textContent = `${checkedColor} is in checkmate! ${gameState.playerSide} wins!`;
+              statusMessage.classList.add('show', 'checkmate');
               gameState.gameOver = true;
-              resetGame();
+              setTimeout(() => {
+                resetGame();
+              }, 500);
             } else if (isInCheck(checkedColor)) {
-              alert(`${checkedColor} is in check!`);
+              statusMessage.textContent = `${checkedColor} is in check!`;
+              statusMessage.classList.add('show');
+              setTimeout(() => {
+                statusMessage.classList.remove('show');
+              }, 500); // Fade out after 2 seconds
               if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
                 setTimeout(makeAIMove, 500);
               }
-            } else if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
-              setTimeout(makeAIMove, 500);
+            } else {
+              statusMessage.classList.remove('show'); // Clear message if no check
+              if (!gameState.gameOver && gameState.playerSide !== gameState.currentTurn) {
+                setTimeout(makeAIMove, 500);
+              }
             }
           }
         };
+
         board.appendChild(square);
       }
     }
   }
 
+//   function makeAIMove() {
+//     const aiColor = gameState.playerSide === 'white' ? 'black' : 'white';
+//     if (gameState.currentTurn !== aiColor) {
+//         console.log(`Skipping AI move—turn is ${gameState.currentTurn}, AI is ${aiColor}`);
+//         return;
+//       }
+//     const board = Array(8).fill(null).map(() => Array(8).fill(null));
+//     document.querySelectorAll('.piece').forEach(piece => {
+//       const row = parseInt(piece.parentElement.dataset.row);
+//       const col = parseInt(piece.parentElement.dataset.col);
+//       board[row][col] = {
+//         piece_type: piece.dataset.type,
+//         color: piece.dataset.color
+//       };
+//     });
+
+//     const gameStateForRust = {
+//       board,
+//       current_turn: aiColor,
+//       move_history: gameState.moveHistory,
+//       player_side: gameState.playerSide,
+//       castling_rights: gameState.castlingRights,
+//       en_passant_target: gameState.enPassantTarget
+//     };
+
+//     console.log('Sending to Rust:', JSON.stringify(gameStateForRust, null, 2));
+
+//     const rustAI = spawn('C:/git/rustprojects/chessAIvibe/target/release/chessAIvibe.exe', [], {
+//       stdio: ['pipe', 'pipe', 'inherit']
+//     });
+
+//     const input = JSON.stringify(gameStateForRust);
+//     rustAI.stdin.write(input);
+//     rustAI.stdin.end();
+
+//     let output = '';
+//     rustAI.stdout.on('data', (data) => {
+//       output += data.toString();
+//     });
+
+//     rustAI.on('close', (code) => {
+//       console.log(`Rust AI exited with code ${code}, output: ${output}`);
+//       if (code === 0) {
+//         const move = JSON.parse(output);
+//         console.log(`AI move: ${JSON.stringify(move)}`);
+
+//         const piece = document.querySelector(
+//           `.square[data-row="${move.from_row}"][data-col="${move.from_col}"] .piece`
+//         );
+//         const target = document.querySelector(
+//           `.square[data-row="${move.to_row}"][data-col="${move.to_col}"]`
+//         );
+
+//         if (piece && target) {
+//           let captured = null;
+//           if (piece.dataset.type === 'king' && Math.abs(move.to_col - move.from_col) === 2) {
+//             const rookCol = move.to_col > move.from_col ? 7 : 0;
+//             const rookSquare = document.querySelector(`.square[data-row="${move.from_row}"][data-col="${rookCol}"]`);
+//             const rook = rookSquare ? rookSquare.querySelector('.piece') : null;
+//             const newRookCol = move.to_col > move.from_col ? 5 : 3;
+//             const newRookSquare = document.querySelector(`.square[data-row="${move.from_row}"][data-col="${newRookCol}"]`);
+//             if (rook && newRookSquare) newRookSquare.appendChild(rook);
+//             target.appendChild(piece);
+//             if (aiColor === 'white') {
+//               gameState.castlingRights.white_kingside = false;
+//               gameState.castlingRights.white_queenside = false;
+//             } else {
+//               gameState.castlingRights.black_kingside = false;
+//               gameState.castlingRights.black_queenside = false;
+//             }
+//           } else {
+//             if (target.querySelector('.piece')) {
+//               captured = target.querySelector('.piece').dataset.type;
+//               target.removeChild(target.querySelector('.piece'));
+//             } else if (piece.dataset.type === 'pawn' && Math.abs(move.from_col - move.to_col) === 1) {
+//               const enPassantRow = aiColor === 'white' ? move.to_row + 1 : move.to_row - 1;
+//               const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${move.to_col}"]`);
+//               if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
+//                 captured = enPassantSquare.querySelector('.piece').dataset.type;
+//                 enPassantSquare.removeChild(enPassantSquare.querySelector('.piece'));
+//               }
+//             }
+//             target.appendChild(piece);
+
+//             // Handle promotion
+//             if (move.promotion) {
+//               piece.src = `./chess-assets/${aiColor}/SVG_icons/${move.promotion}.svg`;
+//               piece.dataset.type = move.promotion;
+//             }
+
+//             // Update castling rights
+//             if (piece.dataset.type === 'king') {
+//               if (aiColor === 'white') {
+//                 gameState.castlingRights.white_kingside = false;
+//                 gameState.castlingRights.white_queenside = false;
+//               } else {
+//                 gameState.castlingRights.black_kingside = false;
+//                 gameState.castlingRights.black_queenside = false;
+//               }
+//             } else if (piece.dataset.type === 'rook') {
+//               if (aiColor === 'white') {
+//                 if (move.from_col === 0) gameState.castlingRights.white_queenside = false;
+//                 if (move.from_col === 7) gameState.castlingRights.white_kingside = false;
+//               } else {
+//                 if (move.from_col === 0) gameState.castlingRights.black_queenside = false;
+//                 if (move.from_col === 7) gameState.castlingRights.black_kingside = false;
+//               }
+//             }
+
+//             // En passant target
+//             if (piece.dataset.type === 'pawn' && Math.abs(move.from_row - move.to_row) === 2) {
+//               gameState.enPassantTarget = [move.to_row + (aiColor === 'white' ? 1 : -1), move.to_col];
+//             } else {
+//               gameState.enPassantTarget = null;
+//             }
+//           }
+
+//           gameState.moveHistory.push({
+//             fromRow: move.from_row,
+//             fromCol: move.from_col,
+//             toRow: move.to_row,
+//             toCol: move.to_col,
+//             piece: piece.dataset.type,
+//             captured,
+//             promotion: move.promotion
+//           });
+//           gameState.currentTurn = gameState.playerSide;
+
+//           const checkedColor = gameState.currentTurn;
+//           if (isInCheckmate(checkedColor)) {
+//             alert(`${checkedColor} is in checkmate! ${aiColor} wins!`);
+//             gameState.gameOver = true;
+//             resetGame();
+//           } else if (isInCheck(checkedColor)) {
+//             alert(`${checkedColor} is in check!`);
+//           }
+//           gameState.currentTurn = gameState.playerSide;
+//         } else {
+//           console.error('Failed to execute move:', { piece, target });
+//         }
+//       } else {
+//         console.error(`Rust AI failed with code ${code}`);
+//       }
+//     });
+//   }
+
+  // ... (existing code unchanged until getPiece)
+
   function makeAIMove() {
     const aiColor = gameState.playerSide === 'white' ? 'black' : 'white';
     if (gameState.currentTurn !== aiColor) {
-        console.log(`Skipping AI move—turn is ${gameState.currentTurn}, AI is ${aiColor}`);
-        return;
-      }
+      console.log(`Skipping AI move—turn is ${gameState.currentTurn}, AI is ${aiColor}`);
+      return;
+    }
+  
     const board = Array(8).fill(null).map(() => Array(8).fill(null));
     document.querySelectorAll('.piece').forEach(piece => {
       const row = parseInt(piece.parentElement.dataset.row);
@@ -211,8 +723,8 @@ function resetGame() {
         color: piece.dataset.color
       };
     });
-
-    const gameStateForRust = {
+  
+    const gameStateForStockfish = {
       board,
       current_turn: aiColor,
       move_history: gameState.moveHistory,
@@ -220,45 +732,72 @@ function resetGame() {
       castling_rights: gameState.castlingRights,
       en_passant_target: gameState.enPassantTarget
     };
-
-    console.log('Sending to Rust:', JSON.stringify(gameStateForRust, null, 2));
-
-    const rustAI = spawn('C:/git/rustprojects/chessAIvibe/target/release/chessAIvibe.exe', [], {
-      stdio: ['pipe', 'pipe', 'inherit']
-    });
-
-    const input = JSON.stringify(gameStateForRust);
-    rustAI.stdin.write(input);
-    rustAI.stdin.end();
-
+  
+    const fen = jsonToFen(gameStateForStockfish);
+    console.log('FEN sent to Stockfish:', fen);
+  
+    const stockfishPath = path.join(__dirname, 'bin', 'stockfish');
+    const stockfish = spawn(stockfishPath, [], { stdio: ['pipe', 'pipe', 'inherit'] });
+  
+    stockfish.stdin.write('uci\n');
+    stockfish.stdin.write('isready\n');
+    stockfish.stdin.write(`position fen ${fen}\n`);
+    stockfish.stdin.write('go depth 15\n');
+  
     let output = '';
-    rustAI.stdout.on('data', (data) => {
+    stockfish.stdout.on('data', (data) => {
       output += data.toString();
-    });
-
-    rustAI.on('close', (code) => {
-      console.log(`Rust AI exited with code ${code}, output: ${output}`);
-      if (code === 0) {
-        const move = JSON.parse(output);
-        console.log(`AI move: ${JSON.stringify(move)}`);
-
+      if (output.includes('bestmove')) {
+        const moveStr = output.match(/bestmove (\S+)/)[1];
+        console.log(`Stockfish move: ${moveStr}`);
+  
+        // Parse UCI move
+        const fromCol = moveStr.charCodeAt(0) - 97; // e.g., 'e' -> 4
+        const fromRow = 8 - parseInt(moveStr[1]);   // e.g., '1' -> 7
+        const toCol = moveStr.charCodeAt(2) - 97;   // e.g., 'g' -> 6
+        const toRow = 8 - parseInt(moveStr[3]);     // e.g., '1' -> 7
+        const promotion = moveStr.length > 4 ? moveStr[4] : null;
+  
+        const move = {
+          from_row: fromRow,
+          from_col: fromCol,
+          to_row: toRow,
+          to_col: toCol,
+          promotion: promotion === 'q' ? 'queen' : promotion === 'r' ? 'rook' : promotion === 'b' ? 'bishop' : promotion === 'n' ? 'knight' : null
+        };
+  
         const piece = document.querySelector(
           `.square[data-row="${move.from_row}"][data-col="${move.from_col}"] .piece`
         );
         const target = document.querySelector(
           `.square[data-row="${move.to_row}"][data-col="${move.to_col}"]`
         );
-
+  
         if (piece && target) {
           let captured = null;
-          if (piece.dataset.type === 'king' && Math.abs(move.to_col - move.from_col) === 2) {
-            const rookCol = move.to_col > move.from_col ? 7 : 0;
-            const rookSquare = document.querySelector(`.square[data-row="${move.from_row}"][data-col="${rookCol}"]`);
+          const isCastling = piece.dataset.type === 'king' && Math.abs(move.to_col - move.from_col) === 2;
+  
+          if (isCastling) {
+            // Handle castling: move king and rook
+            const isKingside = move.to_col > move.from_col;
+            const rookFromCol = isKingside ? 7 : 0;
+            const rookToCol = isKingside ? 5 : 3;
+            const rookSquare = document.querySelector(
+              `.square[data-row="${move.from_row}"][data-col="${rookFromCol}"]`
+            );
+            const newRookSquare = document.querySelector(
+              `.square[data-row="${move.from_row}"][data-col="${rookToCol}"]`
+            );
             const rook = rookSquare ? rookSquare.querySelector('.piece') : null;
-            const newRookCol = move.to_col > move.from_col ? 5 : 3;
-            const newRookSquare = document.querySelector(`.square[data-row="${move.from_row}"][data-col="${newRookCol}"]`);
-            if (rook && newRookSquare) newRookSquare.appendChild(rook);
-            target.appendChild(piece);
+  
+            if (rook && newRookSquare) {
+              newRookSquare.appendChild(rook); // Move rook
+            } else {
+              console.error('Castling failed: rook or target square not found');
+            }
+            target.appendChild(piece); // Move king
+  
+            // Update castling rights
             if (aiColor === 'white') {
               gameState.castlingRights.white_kingside = false;
               gameState.castlingRights.white_queenside = false;
@@ -267,26 +806,27 @@ function resetGame() {
               gameState.castlingRights.black_queenside = false;
             }
           } else {
+            // Non-castling move
             if (target.querySelector('.piece')) {
               captured = target.querySelector('.piece').dataset.type;
               target.removeChild(target.querySelector('.piece'));
-            } else if (piece.dataset.type === 'pawn' && Math.abs(move.from_col - move.to_col) === 1) {
+            } else if (piece.dataset.type === 'pawn' && Math.abs(move.from_col - move.to_col) === 1 && !target.querySelector('.piece')) {
               const enPassantRow = aiColor === 'white' ? move.to_row + 1 : move.to_row - 1;
-              const enPassantSquare = document.querySelector(`.square[data-row="${enPassantRow}"][data-col="${move.to_col}"]`);
+              const enPassantSquare = document.querySelector(
+                `.square[data-row="${enPassantRow}"][data-col="${move.to_col}"]`
+              );
               if (enPassantSquare && enPassantSquare.querySelector('.piece')) {
                 captured = enPassantSquare.querySelector('.piece').dataset.type;
                 enPassantSquare.removeChild(enPassantSquare.querySelector('.piece'));
               }
             }
             target.appendChild(piece);
-
-            // Handle promotion
+  
             if (move.promotion) {
               piece.src = `./chess-assets/${aiColor}/SVG_icons/${move.promotion}.svg`;
               piece.dataset.type = move.promotion;
             }
-
-            // Update castling rights
+  
             if (piece.dataset.type === 'king') {
               if (aiColor === 'white') {
                 gameState.castlingRights.white_kingside = false;
@@ -304,15 +844,14 @@ function resetGame() {
                 if (move.from_col === 7) gameState.castlingRights.black_kingside = false;
               }
             }
-
-            // En passant target
+  
             if (piece.dataset.type === 'pawn' && Math.abs(move.from_row - move.to_row) === 2) {
               gameState.enPassantTarget = [move.to_row + (aiColor === 'white' ? 1 : -1), move.to_col];
             } else {
               gameState.enPassantTarget = null;
             }
           }
-
+  
           gameState.moveHistory.push({
             fromRow: move.from_row,
             fromCol: move.from_col,
@@ -323,26 +862,38 @@ function resetGame() {
             promotion: move.promotion
           });
           gameState.currentTurn = gameState.playerSide;
-
+  
           const checkedColor = gameState.currentTurn;
           if (isInCheckmate(checkedColor)) {
-            alert(`${checkedColor} is in checkmate! ${aiColor} wins!`);
+            statusMessage.textContent = `${checkedColor} is in checkmate! ${gameState.playerSide} wins!`;
+            statusMessage.classList.add('show', 'checkmate');
             gameState.gameOver = true;
-            resetGame();
+            setTimeout(() => {
+                resetGame();
+              }, 1000);
           } else if (isInCheck(checkedColor)) {
-            alert(`${checkedColor} is in check!`);
+            statusMessage.textContent = `${checkedColor} is in check!`;
+            statusMessage.classList.add('show');
+            setTimeout(() => {
+              statusMessage.classList.remove('show');
+            }, 500); // Fade out after 2 seconds
           }
           gameState.currentTurn = gameState.playerSide;
         } else {
           console.error('Failed to execute move:', { piece, target });
         }
-      } else {
-        console.error(`Rust AI failed with code ${code}`);
+  
+        stockfish.stdin.end();
+      }
+    });
+  
+    stockfish.on('close', (code) => {
+      console.log(`Stockfish exited with code ${code}`);
+      if (code !== 0) {
+        console.error(`Stockfish failed with code ${code}`);
       }
     });
   }
-
-  // ... (existing code unchanged until getPiece)
 
   function getPiece(row, col) {
     // Standard chess setup—White at 6-7, Black at 0-1
