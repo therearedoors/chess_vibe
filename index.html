@@ -92,16 +92,14 @@ body {
       grid-template-rows: repeat(8, 60px);
       border: 2px solid #333;
       position: relative;
-      z-index: 11; /* Board above game container */
+      z-index: 11;
     }
     .chessboard.black-view {
-      /* Flip for Black: reverse row and column order */
-      display: flex;
-      flex-direction: column-reverse; /* Rows 7 to 0 */
+      transform: rotate(180deg); /* Flip for Black */
     }
-    .chessboard.black-view .row {
-      display: flex;
-      flex-direction: row-reverse; /* Cols 7 to 0 */
+    .chessboard.black-view .piece {
+      transform: translate(-50%, -50%) rotate(180deg); /* Center */
+
     }
     .square {
       width: 60px;
@@ -151,7 +149,7 @@ body {
     }
     const gameState = {
     playerSide: null,
-    currentTurn: 'white',
+    currentTurn: 'white', // Start null, set in startGame
     moveHistory: [],
     gameOver: false,
     castlingRights: { // Reset to true

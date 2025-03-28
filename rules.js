@@ -113,17 +113,15 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
     if (targetColor === color) return false;
 
     switch (type) {
-      case 'pawn':
-        if (color === 'white') {
-          if (toCol === fromCol && toRow === fromRow - 1 && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-          if (toCol === fromCol && toRow === fromRow - 2 && fromRow === 6 && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-          if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow - 1 && (targetPiece || isEnPassant(fromRow, fromCol, toRow, toCol))) return true;
-        } else {
-          if (toCol === fromCol && toRow === fromRow + 1 && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-          if (toCol === fromCol && toRow === fromRow + 2 && fromRow === 1 && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
-          if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + 1 && (targetPiece || isEnPassant(fromRow, fromCol, toRow, toCol))) return true;
-        }
-        return false;
+        case 'pawn':
+            const direction = gameState.playerSide === 'white' ? -1 : 1; // White up, Black down
+            const startRow = gameState.playerSide === 'white' ? 6 : 1;  // White starts at 6, Black at 1
+            if (color === gameState.playerSide) { // Player's turn
+              if (toCol === fromCol && toRow === fromRow + direction && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
+              if (toCol === fromCol && toRow === fromRow + 2 * direction && fromRow === startRow && !targetPiece) return isPathClear(fromRow, fromCol, toRow, toCol);
+              if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + direction && (targetPiece || isEnPassant(fromRow, fromCol, toRow, toCol))) return true;
+            }
+            return false;
       case 'rook':
         if (fromRow !== toRow && fromCol !== toCol) return false;
         return isPathClear(fromRow, fromCol, toRow, toCol);

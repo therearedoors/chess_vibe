@@ -2,12 +2,18 @@ const { spawn } = require('child_process'); // Add this at the top (Electron/Nod
 
 function startGame(side) {
     gameState.playerSide = side;
+    gameState.currentTurn = 'white'; // Start with player's turn
     document.getElementById('menu').style.display = 'none';
     document.querySelector('.menu-container').style.pointerEvents = 'none';
     document.querySelector('.menu-container').style.display = 'none';
     const gameDiv = document.getElementById('game');
     gameDiv.style.display = 'block';
     renderBoard(gameDiv);
+
+    // AI moves first if player is Black
+    if (gameState.playerSide === 'black') {
+      setTimeout(makeAIMove, 500); // Let AI (White) start
+    }
   }
 
 function resetGame() {
@@ -37,13 +43,20 @@ function resetGame() {
   function renderBoard(container) {
     const board = document.createElement('div');
     board.className = 'chessboard';
+    if (gameState.playerSide === 'black') {
+      board.classList.add('black-view'); // Flip for Black
+    } else {
+        console.log('White view: standard board (row 0 at top, 7 at bottom)');
+    }
     container.appendChild(board);
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
+        const colorRow = gameState.playerSide === 'black' ? (7 - row) : row;
+        const colorCol = gameState.playerSide === 'black' ? (7 - col) : col;
         const square = document.createElement('div');
-        square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
-        square.dataset.row = row;
+        square.className = `square ${(colorRow + colorCol) % 2 === 0 ? 'light' : 'dark'}`;
+        square.dataset.row = row; // Logical 0-7
         square.dataset.col = col;
 
         const piece = getPiece(row, col);
@@ -54,13 +67,18 @@ function resetGame() {
           img.draggable = true;
           img.dataset.type = getPieceType(piece);
           img.dataset.color = getPieceColor(piece);
-          img.ondragstart = (e) => {
+          img.addEventListener('dragstart', (e) => {
             if (!gameState.gameOver && gameState.playerSide === gameState.currentTurn && 
                 img.dataset.color === gameState.playerSide) {
+              console.log(`Drag start: ${img.dataset.type} at (${row},${col}), color: ${img.dataset.color}, turn: ${gameState.currentTurn}`);
               draggedPiece = img;
-              e.dataTransfer.setData('text/plain', `${row},${col}`);
+              const fromRow = parseInt(img.parentElement.dataset.row);
+              const fromCol = parseInt(img.parentElement.dataset.col);
+              e.dataTransfer.setData('text/plain', `${fromRow},${fromCol}`);
+            } else {
+              console.log(`Drag blocked: color ${img.dataset.color}, player ${gameState.playerSide}, turn ${gameState.currentTurn}`);
             }
-          };
+          });
           square.appendChild(img);
         }
 
@@ -75,6 +93,7 @@ function resetGame() {
           e.preventDefault();
           square.classList.remove('drop-target');
           if (draggedPiece && isValidMove(draggedPiece, square)) {
+            console.log(`Drop to: (${row},${col})`);
             const fromRow = parseInt(draggedPiece.parentElement.dataset.row);
             const fromCol = parseInt(draggedPiece.parentElement.dataset.col);
             const toRow = parseInt(square.dataset.row);
@@ -172,7 +191,6 @@ function resetGame() {
             }
           }
         };
-
         board.appendChild(square);
       }
     }
@@ -180,7 +198,10 @@ function resetGame() {
 
   function makeAIMove() {
     const aiColor = gameState.playerSide === 'white' ? 'black' : 'white';
-    
+    if (gameState.currentTurn !== aiColor) {
+        console.log(`Skipping AI move—turn is ${gameState.currentTurn}, AI is ${aiColor}`);
+        return;
+      }
     const board = Array(8).fill(null).map(() => Array(8).fill(null));
     document.querySelectorAll('.piece').forEach(piece => {
       const row = parseInt(piece.parentElement.dataset.row);
@@ -311,6 +332,7 @@ function resetGame() {
           } else if (isInCheck(checkedColor)) {
             alert(`${checkedColor} is in check!`);
           }
+          gameState.currentTurn = gameState.playerSide;
         } else {
           console.error('Failed to execute move:', { piece, target });
         }
@@ -320,20 +342,25 @@ function resetGame() {
     });
   }
 
-function getPiece(row, col) {
+  // ... (existing code unchanged until getPiece)
+
+  function getPiece(row, col) {
+    // Standard chess setup—White at 6-7, Black at 0-1
     const pieces = {
-      0: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'],
-      1: 'pawn',
-      6: 'pawn',
-      7: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook']
-    };
-    if (row in pieces) {
-      const color = row < 2 ? 'black' : 'white';
-      const piece = row === 1 || row === 6 ? pieces[row] : pieces[row][col];
-      return `./chess-assets/${color}/SVG_icons/${piece}.svg`;
-    }
-    return null;
+        0: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'],
+        1: 'pawn',
+        6: 'pawn',
+        7: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook']
+      };
+  
+      if (row in pieces) {
+        const color = row <= 1 ? 'black' : 'white'; // Black at 0-1, White at 6-7
+        const piece = row === 1 || row === 6 ? pieces[row] : pieces[row][col];
+        return `./chess-assets/${color}/SVG_icons/${piece}.svg`;
+      }
+      return null;
   }
+
 
   function getPieceType(src) {
     return src.split('/').pop().replace('.svg', '');
