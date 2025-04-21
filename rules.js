@@ -58,12 +58,64 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
   function isSquareAttacked(row, col, byColor) {
     const pieces = Array.from(document.querySelectorAll(`.piece[data-color="${byColor}"]`));
     for (const piece of pieces) {
-      if (isValidMove(piece, document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`))) {
-        return true;
+      const pieceRow = parseInt(piece.parentElement.dataset.row);
+      const pieceCol = parseInt(piece.parentElement.dataset.col);
+      const type = piece.dataset.type;
+
+      console.log(`Checking if ${byColor} ${type} at (${pieceRow},${pieceCol}) attacks (${row},${col})`);
+
+      // Simulate a move to see if this piece can attack the square
+      switch (type) {
+        case 'pawn':
+          const direction = byColor === 'white' ? -1 : 1;
+          if (Math.abs(pieceCol - col) === 1 && row === pieceRow + direction) {
+            console.log(`Pawn at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+            return true;
+          }
+          break;
+        case 'rook':
+          if (pieceRow === row || pieceCol === col) {
+            if (isPathClear(pieceRow, pieceCol, row, col)) {
+              console.log(`Rook at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+              return true;
+            }
+          }
+          break;
+        case 'bishop':
+          if (Math.abs(pieceRow - row) === Math.abs(pieceCol - col)) {
+            if (isPathClear(pieceRow, pieceCol, row, col)) {
+              console.log(`Bishop at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+              return true;
+            }
+          }
+          break;
+        case 'queen':
+          if ((pieceRow === row || pieceCol === col) || 
+              (Math.abs(pieceRow - row) === Math.abs(pieceCol - col))) {
+            if (isPathClear(pieceRow, pieceCol, row, col)) {
+              console.log(`Queen at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+              return true;
+            }
+          }
+          break;
+        case 'king':
+          if (Math.abs(pieceRow - row) <= 1 && Math.abs(pieceCol - col) <= 1) {
+            console.log(`King at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+            return true;
+          }
+          break;
+        case 'knight':
+          if ((Math.abs(pieceRow - row) === 2 && Math.abs(pieceCol - col) === 1) ||
+              (Math.abs(pieceRow - row) === 1 && Math.abs(pieceCol - col) === 2)) {
+            console.log(`Knight at (${pieceRow},${pieceCol}) can attack (${row},${col})`);
+            return true;
+          }
+          break;
       }
     }
     return false;
   }
+
 
   function isInCheck(color) {
     const king = document.querySelector(`.piece[data-type="king"][data-color="${color}"]`);
@@ -142,7 +194,13 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
         }
         break;
       case 'king':
-        if (Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1) isMoveValid = true;
+        if (Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1) {
+          const opponentColor = color === 'white' ? 'black' : 'white';
+          const isTargetAttacked = isSquareAttacked(toRow, toCol, opponentColor);
+          console.log(`King move to (${toRow},${toCol}) attacked by ${opponentColor}: ${isTargetAttacked}`);
+          if (isTargetAttacked) return false;
+          isMoveValid = true;
+        }
         if (isCastling(piece, fromRow, fromCol, toRow, toCol)) isMoveValid = true;
         break;
       case 'knight':
@@ -155,25 +213,23 @@ function isEnPassant(fromRow, fromCol, toRow, toCol) {
 
     if (!isMoveValid) return false;
 
-    // Simulate the move to check if it leaves the king in check
-    const originalSquare = piece.parentElement;
-    const targetPieceToRemove = targetSquare.querySelector('.piece');
-    if (targetPieceToRemove) targetSquare.removeChild(targetPieceToRemove);
-    targetSquare.appendChild(piece);
+    if (type !== 'king') {
+      const originalSquare = piece.parentElement;
+      const targetPieceToRemove = targetSquare.querySelector('.piece');
+      if (targetPieceToRemove) targetSquare.removeChild(targetPieceToRemove);
+      targetSquare.appendChild(piece);
 
-    const kingInCheck = isInCheck(color);
-    console.log(`After move, ${color} king in check: ${kingInCheck}`);
+      const kingInCheck = isInCheck(color);
+      console.log(`After move, ${color} king in check: ${kingInCheck}`);
 
-    // Undo the move
-    originalSquare.appendChild(piece);
-    if (targetPieceToRemove) targetSquare.appendChild(targetPieceToRemove);
+      originalSquare.appendChild(piece);
+      if (targetPieceToRemove) targetSquare.appendChild(targetPieceToRemove);
 
-    // If the move leaves the king in check, it's illegal
-    if (kingInCheck) {
-      console.log(`Move blocked: leaves ${color} king in check`);
-      return false;
+      if (kingInCheck) {
+        console.log(`Move blocked: leaves ${color} king in check`);
+        return false;
+      }
     }
 
     return true;
   }
-}
